@@ -15,6 +15,7 @@ const supabase = createClient(
 
 const REWARD_MIN = 20;
 const REWARD_MAX = 200;
+// redeploy: function was missing from the hosted project
 
 function parseReward(value: unknown): number | null {
   const reward = Number(value);

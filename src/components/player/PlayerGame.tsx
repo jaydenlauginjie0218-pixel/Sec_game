@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { gameApi } from '@/lib/api';
-import type { Team, Station, Tile, Transaction, Turn } from '@/lib/types';
+import type { Team, Station, Tile, Transaction, Turn, OpenKolam } from '@/lib/types';
 import { DiyaBalance } from '@/components/DiyaIcon';
 import { Dice } from '@/components/Dice';
 import { QRDisplay } from '@/components/QRDisplay';
@@ -11,6 +11,7 @@ import { TILE_LABELS } from '@/lib/gameData';
 import { ShoppingBag, History, MapPin, Gift, Coins, ChevronDown, ChevronUp, Sparkles, LogOut, Users } from 'lucide-react';
 import { PlayerShop } from './PlayerShop';
 import { RiddleTrapModal, type OpenRiddle } from './RiddleTrapModal';
+import { KolamLockModal } from './KolamLockModal';
 
 export function PlayerGame({
   teamId,
@@ -45,6 +46,7 @@ export function PlayerGame({
   const [rewardPopup, setRewardPopup] = useState<string | null>(null);
   const stationsRef = useRef<Station[]>([]);
   const [openRiddle, setOpenRiddle] = useState<OpenRiddle | null>(null);
+  const [openKolam, setOpenKolam] = useState<OpenKolam | null>(null);
 
   const loadData = useCallback(async () => {
     const [teamRes, stationsRes, teamTilesRes, txRes, pendingTurnsRes] = await Promise.all([
@@ -156,16 +158,21 @@ export function PlayerGame({
 
   useEffect(() => {
     let cancelled = false;
-    async function checkRiddle() {
+    async function checkTraps() {
       try {
-        const { trap } = await gameApi.riddleStatus(teamId, sessionToken);
-        if (!cancelled) setOpenRiddle(trap);
+        const [{ trap }, { lock }] = await Promise.all([
+          gameApi.riddleStatus(teamId, sessionToken),
+          gameApi.kolamStatus(teamId, sessionToken),
+        ]);
+        if (cancelled) return;
+        setOpenRiddle(trap);
+        setOpenKolam(lock);
       } catch {
         // Transient failure: the next poll will retry
       }
     }
-    checkRiddle();
-    const interval = setInterval(checkRiddle, 3000);
+    checkTraps();
+    const interval = setInterval(checkTraps, 3000);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -466,6 +473,21 @@ export function PlayerGame({
           onSolved={() => {
             setOpenRiddle(null);
             setRewardPopup('Riddle solved! You can roll again.');
+            setTimeout(() => setRewardPopup(null), 4000);
+            loadData();
+          }}
+        />
+      )}
+
+      {/* Kolam lock modal (cannot be dismissed until solved) */}
+      {openKolam && (
+        <KolamLockModal
+          teamId={teamId}
+          sessionToken={sessionToken}
+          lock={openKolam}
+          onSolved={() => {
+            setOpenKolam(null);
+            setRewardPopup('Kolam pattern solved! You can roll again.');
             setTimeout(() => setRewardPopup(null), 4000);
             loadData();
           }}
